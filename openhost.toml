@@ -16,3 +16,9 @@ cpu_millicores = 1000
 
 [data]
 app_data = true
+
+[[permissions_v2]]
+service = "github.com/imbue-openhost/openhost/services/secrets"
+grants = [
+    { key = "ANTHROPIC_API_KEY" },
+]
