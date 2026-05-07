@@ -1,0 +1,18 @@
+[app]
+name = "openclaw"
+version = "0.1.0"
+description = "OpenClaw AI assistant"
+
+[runtime.container]
+image = "Dockerfile"
+port = 18789
+
+[routing]
+health_check = "/healthz"
+
+[resources]
+memory_mb = 2048
+cpu_millicores = 1000
+
+[data]
+app_data = true
