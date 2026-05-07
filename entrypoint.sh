@@ -36,7 +36,9 @@ gw["auth"] = {
     },
 }
 gw["trustedProxies"] = ["0.0.0.0/0", "::/0"]
-gw.setdefault("controlUi", {})["allowedOrigins"] = ["${APP_ORIGIN}"]
+control_ui = gw.setdefault("controlUi", {})
+control_ui["allowedOrigins"] = ["${APP_ORIGIN}"]
+control_ui["dangerouslyDisableDeviceAuth"] = True
 
 cfg_path.write_text(json.dumps(cfg, indent=2))
 PY
