@@ -20,25 +20,29 @@ APP_ORIGIN="https://${APP_NAME}.${ZONE_DOMAIN}"
 
 ANTHROPIC_API_KEY=""
 if [ -n "$OPENHOST_ROUTER_URL" ] && [ -n "$OPENHOST_APP_TOKEN" ]; then
-    secrets_response=$(curl -fsS -X POST \
+    secrets_response=$(curl -sS -X POST \
         -H "Authorization: Bearer $OPENHOST_APP_TOKEN" \
         -H "Content-Type: application/json" \
-        -H "X-OpenHost-Service-URL: github.com/imbue-openhost/openhost/services/secrets" \
-        -H "X-OpenHost-Service-Version: >=0.1.0" \
-        -H "X-OpenHost-Service-Endpoint: get" \
         -d '{"keys": ["ANTHROPIC_API_KEY"]}' \
-        "$OPENHOST_ROUTER_URL/_services_v2/service_request" 2>/dev/null) || secrets_response=""
-    if [ -n "$secrets_response" ]; then
-        ANTHROPIC_API_KEY=$(printf '%s' "$secrets_response" | python3 -c 'import sys,json
-try: print(json.load(sys.stdin).get("secrets",{}).get("ANTHROPIC_API_KEY",""))
-except Exception: print("")' 2>/dev/null || echo "")
-    fi
+        "$OPENHOST_ROUTER_URL/api/services/v2/call/secrets/get" 2>/dev/null || true)
+    parsed=$(printf '%s' "$secrets_response" | python3 -c 'import sys,json
+try:
+    d = json.load(sys.stdin)
+    key = (d.get("secrets") or {}).get("ANTHROPIC_API_KEY", "")
+    grant_url = d.get("grant_url") or (d.get("required_grant") or {}).get("grant_url", "")
+    print(f"{key}\t{grant_url}")
+except Exception: print("\t")' 2>/dev/null || printf '\t')
+    ANTHROPIC_API_KEY=$(printf '%s' "$parsed" | cut -f1)
+    GRANT_URL=$(printf '%s' "$parsed" | cut -f2)
 fi
 
 if [ -n "$ANTHROPIC_API_KEY" ]; then
     echo "[entrypoint] ANTHROPIC_API_KEY loaded from secrets service"
+elif [ -n "$GRANT_URL" ]; then
+    echo "[entrypoint] ANTHROPIC_API_KEY permission needed — approve at: $GRANT_URL"
+    echo "[entrypoint] After approving, run: oh app reload openclaw"
 else
-    echo "[entrypoint] ANTHROPIC_API_KEY not available (grant the permission and reload)"
+    echo "[entrypoint] ANTHROPIC_API_KEY not available; configure ANTHROPIC_API_KEY in the secrets app and reload"
 fi
 
 runuser -u node -- python3 - <<PY
