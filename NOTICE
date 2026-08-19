@@ -1,0 +1,30 @@
+bottled-openclaw
+================
+
+This repository packages OpenClaw for Cloud in a Bottle / OpenHost.
+
+OpenClaw
+--------
+This image is built FROM the official OpenClaw container image and distributes
+OpenClaw, a self-hosted personal AI assistant / multi-channel gateway.
+
+  Upstream:    https://github.com/openclaw/openclaw
+  License:     MIT License, Copyright (c) 2026 OpenClaw Foundation
+  Base image:  ghcr.io/openclaw/openclaw, pinned by digest in the Dockerfile
+               (tag 2026.7.1). Third-party components bundled in OpenClaw are
+               listed in the upstream THIRD_PARTY_NOTICES.md.
+
+OpenClaw is distributed under the MIT License; its copyright notice and the MIT
+permission notice are reproduced in LICENSE, as MIT requires for
+redistribution. OpenClaw's source is not modified by this package; the
+container entrypoint binds its data directory to persistent storage, fetches
+the Anthropic API key from the Cloud in a Bottle secrets service, and writes an
+OpenClaw config that trusts the Cloud in a Bottle router's owner header for
+authentication and sets the default model.
+
+Licensing of this repository
+----------------------------
+Both the bundled OpenClaw (MIT, Copyright (c) 2026 OpenClaw Foundation) and the
+files original to this repository - the Dockerfile, entrypoint.sh,
+openhost.toml, and documentation (Copyright (c) 2026 the Cloud in a Bottle
+authors) - are provided under the MIT License. See LICENSE.

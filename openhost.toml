@@ -12,7 +12,7 @@ health_check = "/healthz"
 
 [resources]
 memory_mb = 2048
-cpu_millicores = 1000
+cpu_cores = 1.0
 
 [data]
 app_data = true
