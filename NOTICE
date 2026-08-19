@@ -17,10 +17,10 @@ OpenClaw, a self-hosted personal AI assistant / multi-channel gateway.
 OpenClaw is distributed under the MIT License; its copyright notice and the MIT
 permission notice are reproduced in LICENSE, as MIT requires for
 redistribution. OpenClaw's source is not modified by this package; the
-container entrypoint only binds its data directory to persistent storage,
-fetches the Anthropic API key from the Cloud in a Bottle secrets service, and
-writes an OpenClaw config that trusts the Cloud in a Bottle router's owner
-header for authentication.
+container entrypoint binds its data directory to persistent storage, fetches
+the Anthropic API key from the Cloud in a Bottle secrets service, and writes an
+OpenClaw config that trusts the Cloud in a Bottle router's owner header for
+authentication and sets the default model.
 
 Licensing of this repository
 ----------------------------
