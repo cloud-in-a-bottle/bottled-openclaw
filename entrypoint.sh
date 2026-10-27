@@ -16,7 +16,13 @@ fi
 
 ZONE_DOMAIN="${OPENHOST_ZONE_DOMAIN:-localhost}"
 APP_NAME="${OPENHOST_APP_NAME:-openclaw}"
-APP_ORIGIN="https://${APP_NAME}.${ZONE_DOMAIN}"
+# The control UI's browser origin. Real zones are https; a dev router (or the test harness) serves plain http, and
+# OPENHOST_ROUTER_PUBLIC_URL says which.
+case "${OPENHOST_ROUTER_PUBLIC_URL:-}" in
+    http://*) APP_SCHEME=http ;;
+    *) APP_SCHEME=https ;;
+esac
+APP_ORIGIN="${APP_SCHEME}://${APP_NAME}.${ZONE_DOMAIN}"
 
 ANTHROPIC_API_KEY=""
 if [ -n "$OPENHOST_ROUTER_URL" ] && [ -n "$OPENHOST_APP_TOKEN" ]; then
@@ -47,14 +53,19 @@ fi
 
 runuser -u node -- python3 - <<PY
 import json
+import secrets
 from pathlib import Path
 
 cfg_path = Path("$DATA_DIR/openclaw.json")
 cfg = json.loads(cfg_path.read_text()) if cfg_path.exists() else {}
 
 gw = cfg.setdefault("gateway", {})
+# The gateway's own in-process clients (eg the agent's sessions_* tools) connect to it over loopback without the
+# router's owner header, so they need a local password; keep it stable across boots.
+local_password = (gw.get("auth") or {}).get("password") or secrets.token_urlsafe(32)
 gw["auth"] = {
     "mode": "trusted-proxy",
+    "password": local_password,
     "trustedProxy": {
         "userHeader": "X-OpenHost-Is-Owner",
         "requiredHeaders": ["X-OpenHost-Is-Owner"],
