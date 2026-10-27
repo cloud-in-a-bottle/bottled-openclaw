@@ -19,7 +19,7 @@ APP_NAME="${OPENHOST_APP_NAME:-openclaw}"
 APP_ORIGIN="https://${APP_NAME}.${ZONE_DOMAIN}"
 
 ANTHROPIC_API_KEY=""
-if false; then
+if [ -n "$OPENHOST_ROUTER_URL" ] && [ -n "$OPENHOST_APP_TOKEN" ]; then
     secrets_response=$(curl -sS -X POST \
         -H "Authorization: Bearer $OPENHOST_APP_TOKEN" \
         -H "Content-Type: application/json" \
@@ -58,6 +58,7 @@ gw["auth"] = {
     "trustedProxy": {
         "userHeader": "X-OpenHost-Is-Owner",
         "requiredHeaders": ["X-OpenHost-Is-Owner"],
+        "allowUsers": ["true"],
         "allowLoopback": True,
     },
 }
