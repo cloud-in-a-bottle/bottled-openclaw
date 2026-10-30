@@ -1,8 +1,10 @@
 """Tests for what this package changes on top of the upstream OpenClaw image.
 
-- Owner auto-login: gateway auth is trusted-proxy on the router's X-OpenHost-Is-Owner header, device pairing is off,
-  and the control UI origin is allowed, so the owner's browser connects straight to the control panel.
-- Config: our openclaw.json (default model Claude Sonnet) lives in the app data dir, symlinked to ~/.openclaw.
+- Owner auto-login: owner-proxy.mjs is the gateway's only trusted proxy and rebuilds forwarded client headers; gateway
+  auth is trusted-proxy on the router's X-OpenHost-Is-Owner header, with full scopes for the owner, and the control UI
+  origin is allowed, so the owner's browser connects straight to the control panel.
+- The gateway's own local clients reach it over loopback with a local password.
+- Config: our openclaw.json (default model Claude Sonnet) lives in the app data dir (OPENCLAW_STATE_DIR).
 - Secrets: ANTHROPIC_API_KEY is fetched from the secrets service at boot and passed to the gateway.
 """
 
@@ -81,14 +83,14 @@ def test_owner_control_panel_connects_without_login(stack: OpenhostStack) -> Non
             config = _request(ws, "config.get", {})
             assert config.get("ok"), f"config.get failed: {config}"
             model = config["payload"].get("config", {}).get("agents", {}).get("defaults", {}).get("model")
-            # Our entrypoint writes this into the app data dir; the gateway only sees it through the ~/.openclaw symlink.
+            # Our entrypoint writes this into the app data dir, which the gateway reads as its state dir.
             primary = model.get("primary") if isinstance(model, dict) else model
             assert primary == "anthropic/claude-sonnet-4-6", f"gateway isn't using our config: model={model}"
             return
     raise AssertionError(f"control panel WebSocket connect failed: {last}{_logs(stack)}")
 
 
-def test_gateway_refuses_requests_without_owner_header(stack: OpenhostStack) -> None:
+def _wait_for_owner_tools_invoke(stack: OpenhostStack) -> None:
     deadline = time.monotonic() + 180
     while True:
         try:
@@ -100,6 +102,10 @@ def test_gateway_refuses_requests_without_owner_header(stack: OpenhostStack) -> 
                 raise
         time.sleep(3)
     assert owner.status_code == 200, f"owner tools/invoke: {owner.status_code}: {owner.text[:300]}{_logs(stack)}"
+
+
+def test_gateway_refuses_requests_without_owner_header(stack: OpenhostStack) -> None:
+    _wait_for_owner_tools_invoke(stack)
     # stack.app_url bypasses the router, so nothing stamps the owner header.
     anonymous = requests.post(f"{stack.app_url}/tools/invoke", json=SESSIONS_LIST, timeout=30)
     assert anonymous.status_code == 401, (
@@ -110,6 +116,58 @@ def test_gateway_refuses_requests_without_owner_header(stack: OpenhostStack) -> 
     )
     assert not_owner.status_code == 401, (
         f"expected 401 for a non-owner: {not_owner.status_code}: {not_owner.text[:300]}"
+    )
+
+
+def test_forged_forwarded_headers_are_replaced(stack: OpenhostStack) -> None:
+    """A request straight to the container port (no router, so no owner header) claiming to come from loopback.
+
+    owner-proxy.mjs replaces the forwarded headers with its own view of the peer, so the gateway attributes the request
+    to a non-loopback client and refuses it for lacking the owner identity (401). A 403 (proxy_attribution_required)
+    means the gateway no longer accepts our proxy's attribution: it trusts more than loopback, or the client's headers
+    got through.
+    """
+    forged = {"X-Forwarded-For": "127.0.0.1", "X-Real-IP": "127.0.0.1", "Forwarded": "for=127.0.0.1"}
+    deadline = time.monotonic() + 180
+    while True:  # wait out gateway startup (connection refused, 502 from our proxy, 503 from the gateway)
+        try:
+            response = requests.post(f"{stack.app_url}/tools/invoke", json=SESSIONS_LIST, headers=forged, timeout=30)
+            if response.status_code not in (502, 503) or time.monotonic() > deadline:
+                break
+        except requests.ConnectionError:
+            if time.monotonic() > deadline:
+                raise
+        time.sleep(3)
+    assert response.status_code == 401, (
+        f"expected 401 for a direct request with forged forwarded headers: {response.status_code}: "
+        f"{response.text[:300]}{_logs(stack)}"
+    )
+
+
+def test_gateway_local_clients_connect_over_loopback(stack: OpenhostStack) -> None:
+    """The gateway's own clients (here the CLI, as the agent's tools use when they can't dispatch in-process) carry no
+    owner header; they connect over loopback with the local password our entrypoint configures."""
+    _wait_for_owner_tools_invoke(stack)
+    result = subprocess.run(
+        [
+            "podman",
+            "exec",
+            "--user",
+            "node",
+            stack.container_name,
+            "node",
+            "/app/openclaw.mjs",
+            "gateway",
+            "call",
+            "sessions.list",
+            "--json",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, (
+        f"local gateway call failed ({result.returncode}): {result.stdout[-1500:]} {result.stderr[-1500:]}{_logs(stack)}"
     )
 
 

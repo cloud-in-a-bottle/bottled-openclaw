@@ -31,9 +31,9 @@ page) as part of a reply. Manage sessions and plugins from the same panel.
 
 - The assistant is non-functional until an `ANTHROPIC_API_KEY` is configured
   (see Setup).
-- OpenClaw's device pairing is turned off because the Cloud in a Bottle owner
-  gate is the authentication; anyone who can open the app is treated as the
-  owner.
+- The Cloud in a Bottle owner gate is the authentication: anyone who can open
+  the app is treated as the owner, and their browser's OpenClaw device pairing
+  is approved automatically.
 - OpenClaw tracks a fast-moving upstream. The base image is pinned by digest,
   so bump it in the Dockerfile to upgrade.
 
