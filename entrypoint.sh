@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 set -e
 
 DATA_DIR=/data/app_data/openclaw
@@ -22,7 +22,10 @@ case "${OPENHOST_ROUTER_PUBLIC_URL:-}" in
     http://*) APP_SCHEME=http ;;
     *) APP_SCHEME=https ;;
 esac
-APP_ORIGIN="${APP_SCHEME}://${APP_NAME}.${ZONE_DOMAIN}"
+APP_HOST="${APP_NAME}.${ZONE_DOMAIN}"
+APP_ORIGIN="${APP_SCHEME}://${APP_HOST}"
+APP_PORT=18789
+GATEWAY_PORT=18790
 
 ANTHROPIC_API_KEY=""
 if [ -n "$OPENHOST_ROUTER_URL" ] && [ -n "$OPENHOST_APP_TOKEN" ]; then
@@ -60,23 +63,40 @@ cfg_path = Path("$DATA_DIR/openclaw.json")
 cfg = json.loads(cfg_path.read_text()) if cfg_path.exists() else {}
 
 gw = cfg.setdefault("gateway", {})
-# The gateway's own in-process clients (eg the agent's sessions_* tools) connect to it over loopback without the
-# router's owner header, so they need a local password; keep it stable across boots.
+# The gateway listens on loopback only; owner-proxy.mjs on the app port is its sole proxy and the only address it trusts.
+gw["bind"] = "loopback"
+gw["port"] = ${GATEWAY_PORT}
+gw["trustedProxies"] = ["127.0.0.1"]
+# The gateway's own local clients (eg the CLI, or agent tools that can't dispatch in-process) connect to it over
+# loopback without the router's owner header, so they need a local password; keep it stable across boots.
 local_password = (gw.get("auth") or {}).get("password") or secrets.token_urlsafe(32)
+owner_scopes = [
+    "operator.admin",
+    "operator.read",
+    "operator.write",
+    "operator.approvals",
+    "operator.pairing",
+    "operator.questions",
+]
 gw["auth"] = {
     "mode": "trusted-proxy",
     "password": local_password,
+    # The router sets X-OpenHost-Is-Owner: true only for the owner, so that is the one identity, with full scopes.
+    "identityScopes": {"true": owner_scopes},
     "trustedProxy": {
         "userHeader": "X-OpenHost-Is-Owner",
         "requiredHeaders": ["X-OpenHost-Is-Owner"],
         "allowUsers": ["true"],
         "allowLoopback": True,
+        # The owner's browser pairs its device without an approval step on the gateway host.
+        "deviceAutoApprove": {"enabled": True},
     },
 }
-gw["trustedProxies"] = ["0.0.0.0/0", "::/0"]
 control_ui = gw.setdefault("controlUi", {})
 control_ui["allowedOrigins"] = ["${APP_ORIGIN}"]
-control_ui["dangerouslyDisableDeviceAuth"] = True
+# Retired upstream in 2026.8.1 (browsers now pair, auto-approved above); left in place, doctor would re-import a
+# pending pairing migration on every boot.
+control_ui.pop("dangerouslyDisableDeviceAuth", None)
 
 agents_defaults = cfg.setdefault("agents", {}).setdefault("defaults", {})
 agents_defaults["model"] = {"primary": "anthropic/claude-sonnet-4-6"}
@@ -84,5 +104,20 @@ agents_defaults["model"] = {"primary": "anthropic/claude-sonnet-4-6"}
 cfg_path.write_text(json.dumps(cfg, indent=2))
 PY
 
+runuser -u node -- env \
+    OWNER_PROXY_LISTEN_PORT="$APP_PORT" \
+    OWNER_PROXY_GATEWAY_PORT="$GATEWAY_PORT" \
+    OWNER_PROXY_FORWARDED_PROTO="$APP_SCHEME" \
+    OWNER_PROXY_FORWARDED_HOST="$APP_HOST" \
+    node /openhost-owner-proxy.mjs &
+
 export ANTHROPIC_API_KEY
-exec runuser -u node --whitelist-environment=ANTHROPIC_API_KEY -- "$@"
+runuser -u node --whitelist-environment=ANTHROPIC_API_KEY -- "$@" &
+
+# tini (PID 1, -g) delivers stop signals to both. If either exits, stop the other and exit with its status.
+set +e
+wait -n
+status=$?
+kill $(jobs -p) 2>/dev/null
+wait
+exit "$status"
