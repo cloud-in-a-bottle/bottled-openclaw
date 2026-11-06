@@ -4,6 +4,8 @@
 Bottle app. OpenClaw is a self-hosted personal AI assistant with a browser
 control panel, an agent that can use tools, and a set of built-in plugins.
 
+`cloudinabottle.toml` sets `prebuilt_image`, so Cloud in a Bottle pulls our signed prebuilt image (built by CI from each release tag) instead of building the Dockerfile. To fork and modify this app, comment out `prebuilt_image` so your instance builds from source.
+
 ## What you get
 
 - A browser control panel for chatting with the assistant and managing agent
