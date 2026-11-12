@@ -1,5 +1,5 @@
-# Pinned by digest for reproducible builds (tag 2026.10.6); bump to upgrade.
-FROM ghcr.io/openclaw/openclaw:2026.10.6@sha256:7dbff0fe5f5359b1badefe90a23efa9f203cd0d3c36bee095f4896c7a1d3864b
+# Pinned by digest for reproducible builds (tag 2026.11.1); bump to upgrade.
+FROM ghcr.io/openclaw/openclaw:2026.11.1@sha256:db0e0809fbd0df375445e9eea8daf2a278ac7ac3a263fa6bfce8fb344ad3ad77
 
 USER root
 
